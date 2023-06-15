@@ -1,6 +1,6 @@
 """Generic types used as pytype annotations."""
 
-from typing import Callable, Sequence
+from typing import Callable, Sequence, Union
 
 import jax
 import jax.numpy as jnp
@@ -13,3 +13,7 @@ Shape = Sequence[int]
 
 # Paramter initializer
 Initializer = Callable[[PRNGKey, Shape, DType], Array]
+
+# Activation function (__init__ parameter)
+ActivationFn = Callable[[Array], Array]
+ActivationArg = Sequence[Union[str, ActivationFn]]
