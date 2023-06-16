@@ -1,7 +1,8 @@
 """Implementations of RL agents."""
 
-from rflax.types import Array, PRNGKey, ConfigDictLike
+from rflax.types import Array, ConfigDictLike
 
+import jax
 from copy import deepcopy
 from ml_collections import ConfigDict
 from typing import Optional, Sequence
@@ -17,9 +18,9 @@ class Agent(object):
                action_bound: Sequence[Array]) -> None:
     self.config = self.get_default_config(config)
 
-    self.action_high = action_bound[0]
-    self.action_low = (-action_bound[0]
-                       if len(action_bound) == 1 else action_bound[1])
+    self.action_high = jax.device_put(action_bound[0])
+    self.action_low = (-action_bound[0] if len(action_bound) == 1 else
+                       jax.device_put(action_bound[1]))
 
     self._obs_dim = obs_dim
     self._action_dim = self.action_high.shape[0]

@@ -7,15 +7,16 @@ from rflax.components.noise import add_normal_noise
 from rflax.components.loss import q_learning_loss
 from rflax.utils import init_model, model_apply, soft_target_update
 from rflax.components.initializers import kernel_default, bias_default
-from rflax.types import Array, PRNGKey, ConfigDictLike, MetricDict
+from rflax.types import Array, PRNGKey, ConfigDictLike, MetricDict, VariableDict
 
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
 from flax.training.train_state import TrainState
+from functools import partial
 from ml_collections import ConfigDict
 from optax import adam
-from typing import Sequence, Optional
+from typing import Sequence, Optional, Tuple
 
 
 class DDPG(Agent):
@@ -76,8 +77,8 @@ class DDPG(Agent):
 
   def sample_actions(self, observations: Array) -> Array:
     self._rng, noise_rng, dropout_rng = jax.random.split(self._rng, 3)
-    actions = model_apply(dropout_rng, self._actor.params, self._actor.apply_fn,
-                          observations, True)
+    actions = self._actor_apply(dropout_rng, self._actor.params, observations,
+                                True)
     actions = jnp.where(actions > 0, actions * self.action_high,
                         -actions * self.action_low)
 
@@ -85,76 +86,106 @@ class DDPG(Agent):
                             self.config.noise_std)
 
   def eval_actions(self, observations: Array) -> Array:
-    actions = model_apply(self._rng, self._actor.params, self._actor.apply_fn,
-                          observations, False)
+    actions = self._actor_apply(self._rng, self._actor.params, observations,
+                                False)
     actions = jnp.where(actions > 0, actions * self.action_high,
                         -actions * self.action_low)
 
     return actions
 
-  def update(self, batch: FrozenDict) -> MetricDict:
-    self._rng, *rngs = jax.random.split(self._rng, 9)
-    metrics = dict()
+  @partial(jax.jit, static_argnames=("self", "enable_dropout"))
+  def _actor_apply(
+      self,
+      rng: PRNGKey,
+      params: VariableDict,
+      observations: Array,
+      enable_dropout: bool,
+  ) -> Array:
+    return self._actor.apply_fn({"params": params},
+                                observations,
+                                enable_dropout,
+                                rngs={"dropout": rng})
 
-    next_actions = model_apply(
-        rngs.pop(),
-        self._actor.params,
-        self._actor.apply_fn,
-        batch["next_observations"],
-        True,
+  @partial(jax.jit, static_argnames=("self", "enable_dropout"))
+  def _critic_apply(
+      self,
+      rng: PRNGKey,
+      params: VariableDict,
+      observations: Array,
+      actions: Array,
+      enable_dropout: bool,
+  ) -> Array:
+    return self._critic.apply_fn(
+        {"params": params},
+        observations,
+        actions,
+        enable_dropout,
+        rngs={"dropout": rng},
     )
-    tgt_qs = model_apply(
-        rngs.pop(),
-        self._tgt_params.critic,
-        self._critic.apply_fn,
-        batch["next_observations"],
-        next_actions,
-        True,
-    )
+
+  @partial(jax.jit, static_argnames=("self",))
+  def _update_critic(
+      self,
+      rng: PRNGKey,
+      critic: TrainState,
+      target_params: VariableDict,
+      batch: FrozenDict,
+  ) -> Tuple[TrainState, VariableDict, MetricDict]:
+    rng_1, rng_2, rng_3 = jax.random.split(rng, 3)
+    next_actions = self._actor_apply(rng_1, self._tgt_params.actor,
+                                     batch["next_observations"], True)
+    tgt_qs = self._critic_apply(rng_2, target_params,
+                                batch["next_observations"], next_actions, True)
 
     @jax.jit
-    def critic_loss(params):
-      qs = model_apply(
-          rngs.pop(),
-          params,
-          self._critic.apply_fn,
-          batch["observations"],
-          batch["actions"],
-          True,
-      )
+    def loss_fn(params):
+      qs = self._critic_apply(rng_3, params, batch["observations"],
+                              batch["actions"], True)
       loss = q_learning_loss(qs, tgt_qs, batch["rewards"], self.config.discount,
                              batch["masks"])
 
       return loss
 
-    loss, grads = jax.value_and_grad(critic_loss)(self._critic.params)
-    self._critic = self._critic.apply_gradients(grads=grads)
-    self._tgt_params.critic = soft_target_update(self._critic.params,
-                                                 self._tgt_params.critic,
-                                                 self.config.tau)
-    metrics["critic_loss"] = loss
+    loss, grads = jax.value_and_grad(loss_fn)(critic.params)
+    critic = critic.apply_gradients(grads=grads)
+    target_params = soft_target_update(critic.params, target_params,
+                                       self.config.tau)
+
+    return critic, target_params, {"critic_loss": loss}
+
+  @partial(jax.jit, static_argnames=("self",))
+  def _update_actor(
+      self,
+      rng: PRNGKey,
+      actor: TrainState,
+      target_params: VariableDict,
+      batch: FrozenDict,
+  ) -> Tuple[TrainState, VariableDict, MetricDict]:
+    rng_1, rng_2 = jax.random.split(rng)
 
     @jax.jit
-    def actor_loss(params):
-      actions = model_apply(rngs.pop(), params, self._actor.apply_fn,
-                            batch["observations"], True)
-      qs = model_apply(
-          rngs.pop(),
-          self._critic.params,
-          self._critic.apply_fn,
-          batch["observations"],
-          actions,
-          True,
-      )
+    def loss_fn(params):
+      actions = self._actor_apply(rng_1, params, batch["observations"], True)
+      qs = self._critic_apply(rng_2, self._critic.params, batch["observations"],
+                              actions, True)
       loss = -jnp.mean(qs)
 
       return loss
 
-    loss, grads = jax.value_and_grad(actor_loss)(self._actor.params)
-    self._actor = self._actor.apply_gradients(grads=grads)
-    self._tgt_params.actor = soft_target_update(self._actor.params,
-                                                self._tgt_params.actor,
-                                                self.config.tau)
-    metrics["actor_loss"] = loss
+    loss, grads = jax.value_and_grad(loss_fn)(actor.params)
+    actor = actor.apply_gradients(grads=grads)
+    target_params = soft_target_update(actor.params, target_params,
+                                       self.config.tau)
 
+    return actor, target_params, {"actor_loss": loss}
+
+  def update(self, batch: FrozenDict) -> MetricDict:
+    self._rng, critic_rng, actor_rng = jax.random.split(self._rng, 3)
+
+    self._critic, self._tgt_params.critic, metrics = self._update_critic(
+        critic_rng, self._critic, self._tgt_params.critic, batch)
+    self._actor, self._tgt_params.actor, actor_info = self._update_actor(
+        actor_rng, self._actor, self._tgt_params.actor, batch)
+
+    metrics.update(actor_info)
     return metrics
