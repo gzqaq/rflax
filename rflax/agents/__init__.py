@@ -1,6 +1,6 @@
 """Implementations of RL agents."""
 
-from rflax.types import Array, ConfigDictLike
+from rflax.types import Array, ConfigDictLike, VariableDict
 
 import jax
 from copy import deepcopy
@@ -25,6 +25,8 @@ class Agent(object):
     self._obs_dim = obs_dim
     self._action_dim = self.action_high.shape[0]
 
+    self._step = 0
+
   @property
   def obs_dim(self) -> int:
     return self._obs_dim
@@ -33,9 +35,18 @@ class Agent(object):
   def action_dim(self) -> int:
     return self._action_dim
 
+  @property
+  def step(self) -> int:
+    return self._step
+
 
 class TargetParams(object):
   """Store params of target networks."""
   def __init__(self, **kwargs):
+    self._keys = []
     for k, v in kwargs.items():
       setattr(self, k, deepcopy(v))
+      self._keys.append(k)
+
+  def to_dict(self) -> VariableDict:
+    return {k: getattr(self, k) for k in self._keys}

@@ -13,6 +13,7 @@ import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
 from flax.training.train_state import TrainState
+from flax.training.checkpoints import save_checkpoint, restore_checkpoint
 from functools import partial
 from ml_collections import ConfigDict
 from optax import adam
@@ -205,6 +206,55 @@ class DDPG(Agent):
     )
 
     metrics.update(actor_info)
-    self._tgt_params = TargetParams(actor=actor_target_params, critic=critic_target_params)
+    self._tgt_params = TargetParams(actor=actor_target_params,
+                                    critic=critic_target_params)
+    self._step += 1
 
     return metrics
+
+  def save_checkpoint(
+      self,
+      ckpt_dir: str,
+      prefix: str = "ddpg_ckpt_",
+      keep: int = 1,
+      overwrite: bool = False,
+      keep_every_n_steps: Optional[int] = None,
+  ) -> None:
+    config_dict = {
+        "_obs_dim": self.obs_dim,
+        "_action_dim": self.action_dim,
+        "action_high": jax.device_get(self.action_high),
+        "action_low": jax.device_get(self.action_low),
+        "_rng": jax.device_get(self._rng),
+        "_step": self.step,
+    }
+    params_dict = {
+        "actor": self._actor,
+        "critic": self._critic,
+        "target_params": self._tgt_params.to_dict(),
+    }
+    save_checkpoint(
+        ckpt_dir,
+        FrozenDict({
+            "config": config_dict,
+            "params": params_dict
+        }),
+        self.step,
+        prefix,
+        keep,
+        overwrite,
+        keep_every_n_steps,
+    )
+
+  def restore_checkpoint(self,
+                         ckpt_dir: str,
+                         prefix: str = "ddpg_ckpt_",
+                         step: Optional[int] = None) -> None:
+    state_dict = restore_checkpoint(ckpt_dir, None, step, prefix)
+
+    for k, v in state_dict["config"].items():
+      setattr(self, k, jax.device_put(v) if isinstance(v, Array) else v)
+
+    self._actor = self._actor.replace(**state_dict["params"]["actor"])
+    self._critic = self._critic.replace(**state_dict["params"]["critic"])
+    self._tgt_params = TargetParams(**state_dict["params"]["target_params"])
