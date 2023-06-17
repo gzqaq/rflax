@@ -186,7 +186,7 @@ class DDPG(Agent):
   def update(self, batch: FrozenDict) -> MetricDict:
     self._rng, critic_rng, actor_rng = jax.random.split(self._rng, 3)
 
-    self._critic, self._tgt_params.critic, metrics = _update_critic(
+    self._critic, critic_target_params, metrics = _update_critic(
         critic_rng,
         self._actor.replace(params=self._tgt_params.actor),
         self._critic,
@@ -195,7 +195,7 @@ class DDPG(Agent):
         self.config.discount,
         self.config.tau,
     )
-    self._actor, self._tgt_params.actor, actor_info = _update_actor(
+    self._actor, actor_target_params, actor_info = _update_actor(
         actor_rng,
         self._actor,
         self._critic,
@@ -205,4 +205,6 @@ class DDPG(Agent):
     )
 
     metrics.update(actor_info)
+    self._tgt_params = TargetParams(actor=actor_target_params, critic=critic_target_params)
+
     return metrics
