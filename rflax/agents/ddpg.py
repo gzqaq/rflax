@@ -276,6 +276,7 @@ class DDPG(Agent):
                          prefix: str = "ddpg_ckpt_",
                          step: Optional[int] = None) -> None:
     state_dict = restore_checkpoint(ckpt_dir, None, step, prefix)
+    state_dict = FrozenDict(state_dict)
 
     for k, v in state_dict["config"].items():
       setattr(self, k, jax.device_put(v) if isinstance(v, Array) else v)
