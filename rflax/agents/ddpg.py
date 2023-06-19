@@ -21,12 +21,19 @@ from typing import Sequence, Optional, Tuple
 
 
 @partial(jax.jit, static_argnames=("enable_dropout",))
-def _actor_apply(rng: PRNGKey, actor: TrainState, observations: Array,
-                 enable_dropout: bool) -> Array:
-  return actor.apply_fn({"params": actor.params},
-                        observations,
-                        enable_dropout,
-                        rngs={"dropout": rng})
+def _actor_apply(
+    rng: PRNGKey,
+    actor: TrainState,
+    observations: Array,
+    enable_dropout: bool,
+    action_bound: Tuple[Array, Array],
+) -> Array:
+  action = actor.apply_fn({"params": actor.params},
+                          observations,
+                          enable_dropout,
+                          rngs={"dropout": rng})
+  return jnp.where(action > 0, action * action_bound[0],
+                   -action * action_bound[1])
 
 
 @partial(jax.jit, static_argnames=("enable_dropout",))
@@ -55,9 +62,11 @@ def _update_critic(
     batch: FrozenDict,
     discount: float,
     tau: float,
+    action_bound: Tuple[Array, Array],
 ) -> Tuple[TrainState, TargetParams, MetricDict]:
   rng_1, rng_2, rng_3 = jax.random.split(rng, 3)
-  next_actions = _actor_apply(rng_1, actor, batch["next_observations"], True)
+  next_actions = _actor_apply(rng_1, actor, batch["next_observations"], True,
+                              action_bound)
   tgt_qs = _critic_apply(
       rng_2,
       critic.replace(params=target_params),
@@ -94,12 +103,18 @@ def _update_actor(
     target_params: TargetParams,
     batch: FrozenDict,
     tau: float,
+    action_bound: Tuple[Array, Array],
 ) -> Tuple[TrainState, TargetParams, MetricDict]:
   rng_1, rng_2 = jax.random.split(rng)
 
   def loss_fn(params):
-    actions = _actor_apply(rng_1, actor.replace(params=params),
-                           batch["observations"], True)
+    actions = _actor_apply(
+        rng_1,
+        actor.replace(params=params),
+        batch["observations"],
+        True,
+        action_bound,
+    )
     qs = _critic_apply(rng_2, critic, batch["observations"], actions, True)
     loss = -jnp.mean(qs)
 
@@ -170,17 +185,25 @@ class DDPG(Agent):
 
   def sample_actions(self, observations: Array) -> Array:
     self._rng, noise_rng, dropout_rng = jax.random.split(self._rng, 3)
-    actions = _actor_apply(dropout_rng, self._actor, observations, True)
-    actions = jnp.where(actions > 0, actions * self.action_high,
-                        -actions * self.action_low)
+    actions = _actor_apply(
+        dropout_rng,
+        self._actor,
+        observations,
+        True,
+        (self.action_high, self.action_low),
+    )
 
     return add_normal_noise(noise_rng, actions, self.config.noise_mean,
                             self.config.noise_std)
 
   def eval_actions(self, observations: Array) -> Array:
-    actions = _actor_apply(self._rng, self._actor, observations, False)
-    actions = jnp.where(actions > 0, actions * self.action_high,
-                        -actions * self.action_low)
+    actions = _actor_apply(
+        self._rng,
+        self._actor,
+        observations,
+        False,
+        (self.action_high, self.action_low),
+    )
 
     return actions
 
@@ -195,6 +218,7 @@ class DDPG(Agent):
         batch,
         self.config.discount,
         self.config.tau,
+        (self.action_high, self.action_low),
     )
     self._actor, actor_target_params, actor_info = _update_actor(
         actor_rng,
@@ -203,6 +227,7 @@ class DDPG(Agent):
         self._tgt_params.actor,
         batch,
         self.config.tau,
+        (self.action_high, self.action_low),
     )
 
     metrics.update(actor_info)
