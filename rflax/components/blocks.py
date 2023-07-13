@@ -1,6 +1,6 @@
 """Basic nn blocks."""
 
-from rflax.types import Array, DType, Initializer, ActivationFn, ActivationArg
+from rflax.types import Array, DType, Initializer, ActivationFn
 from rflax.components.initializers import kernel_default, bias_default
 
 from typing import Optional, Union, Callable, Sequence

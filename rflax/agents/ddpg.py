@@ -5,7 +5,7 @@ from rflax.components.nets.policy import DetTanhPolicy
 from rflax.components.nets.value import StateActionValue
 from rflax.components.noise import add_normal_noise
 from rflax.components.loss import q_learning_loss
-from rflax.utils import init_model, soft_target_update, model_apply
+from rflax.utils import init_model, soft_target_update
 from rflax.components.initializers import kernel_default, bias_default
 from rflax.types import Array, PRNGKey, ConfigDictLike, MetricDict, VariableDict
 
