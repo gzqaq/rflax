@@ -5,6 +5,7 @@ from rflax.components.initializers import kernel_default, bias_default
 
 from typing import Optional, Union, Callable, Sequence
 
+import chex
 import jax.numpy as jnp
 import flax.linen as nn
 
@@ -18,9 +19,8 @@ def _convert_to_activation_fn(
   elif callable(fn_or_string):
     return fn_or_string
   else:
-    return ValueError(
-        "Don't know how to convert %s to an activation function." %
-        (fn_or_string,))
+    raise ValueError("Don't know how to convert %s to an activation function." %
+                     (fn_or_string,))
 
 
 class MlpBlock(nn.Module):
@@ -28,15 +28,18 @@ class MlpBlock(nn.Module):
   use_bias: bool
   intermediate_dim: int = 2048
   dtype: DType = jnp.float32
-  activations: ActivationArg = ("relu",)
+  activations: str = "relu"
   kernel_init: Initializer = kernel_default()
   bias_init: Initializer = bias_default()
   intermediate_dropout: float = 0.1
   final_dropout: Optional[float] = None
 
   @nn.compact
-  def __call__(self, inp: Array, enable_dropout: bool = True) -> Array:
-    def dense(n_feats: int, name: str, inputs: Array, dropout: float) -> Array:
+  def __call__(self,
+               inp: Array,
+               enable_dropout: bool = True) -> chex.ArrayDevice:
+    def dense(n_feats: int, name: str, inputs: Array,
+              dropout: float) -> chex.ArrayDevice:
       x = nn.Dense(
           features=n_feats,
           use_bias=self.use_bias,
@@ -47,7 +50,7 @@ class MlpBlock(nn.Module):
       )(inputs)
       return nn.Dropout(rate=dropout)(x, deterministic=not enable_dropout)
 
-    for i, act_fn in enumerate(self.activations):
+    for i, act_fn in enumerate(self.activations.split("-")):
       dense_name = "hidden" if len(self.activations) == 1 else f"hidden_{i}"
       inp = dense(self.intermediate_dim, dense_name, inp,
                   self.intermediate_dropout)
@@ -66,7 +69,7 @@ class MultiOutputMlp(nn.Module):
   use_bias: bool
   intermediate_dim: int = 2048
   dtype: DType = jnp.float32
-  activations: ActivationArg = ("relu",)
+  activations: str = "relu"
   kernel_init: Initializer = kernel_default()
   bias_init: Initializer = bias_default()
   intermediate_dropout: float = 0.1
@@ -76,7 +79,8 @@ class MultiOutputMlp(nn.Module):
   def __call__(self,
                inp: Array,
                enable_dropout: bool = True) -> Sequence[Array]:
-    def dense(n_feats: int, name: str, inputs: Array, dropout: float) -> Array:
+    def dense(n_feats: int, name: str, inputs: Array,
+              dropout: float) -> chex.ArrayDevice:
       x = nn.Dense(
           features=n_feats,
           use_bias=self.use_bias,
@@ -87,7 +91,7 @@ class MultiOutputMlp(nn.Module):
       )(inputs)
       return nn.Dropout(rate=dropout)(x, deterministic=not enable_dropout)
 
-    for i, act_fn in enumerate(self.activations):
+    for i, act_fn in enumerate(self.activations.split("-")):
       dense_name = "hidden" if len(self.activations) == 1 else f"hidden_{i}"
       inp = dense(self.intermediate_dim, dense_name, inp,
                   self.intermediate_dropout)

@@ -1,29 +1,32 @@
 """Useful utility functions."""
 
-from rflax.types import Array, PRNGKey, VariableDict, DataDict
+from rflax.types import PRNGKey, VariableDict, DataDict
 
+import chex
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
 import numpy as np
+from flax.core.frozen_dict import FrozenDict
 from typing import Callable, Any, Union, List
 
 
-def expand_and_repeat(array: Array, axis: int, repeats: int) -> Array:
+def expand_and_repeat(array: chex.Array, axis: int,
+                      repeats: int) -> chex.ArrayDevice:
   array = jnp.expand_dims(array, axis=axis)
   return jnp.repeat(array, repeats=repeats, axis=axis)
 
 
-def to_jax_batch(array: Union[np.ndarray, Array]) -> Array:
+def to_jax_batch(array: chex.Array) -> chex.ArrayBatched:
   """Add one dimension outside the input and convert it to jax.Array."""
   return jax.device_put(array[None, ...])
 
 
-def batch_to_jax(batch: DataDict) -> DataDict:
-  return jax.tree_map(jax.device_put, batch)
+def batch_to_jax(batch: DataDict) -> FrozenDict:
+  return FrozenDict(jax.tree_map(jax.device_put, batch))
 
 
-def squeeze_to_np(array: Array) -> np.ndarray:
+def squeeze_to_np(array: chex.ArrayDevice) -> np.ndarray:
   """Convert a jax.Array to np.ndarray and squeeze its first dimension."""
   return np.array(array).squeeze(axis=0)
 
