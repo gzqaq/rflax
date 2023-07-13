@@ -9,6 +9,7 @@ from rflax.utils import init_model, soft_target_update, model_apply
 from rflax.components.initializers import kernel_default, bias_default
 from rflax.types import Array, PRNGKey, ConfigDictLike, MetricDict, VariableDict
 
+import chex
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
@@ -27,7 +28,7 @@ def _actor_apply(
     observations: Array,
     enable_dropout: bool,
     action_bound: Tuple[Array, Array],
-) -> Array:
+) -> chex.ArrayDevice:
   action = actor.apply_fn({"params": actor.params},
                           observations,
                           enable_dropout,
@@ -43,7 +44,7 @@ def _critic_apply(
     observations: Array,
     actions: Array,
     enable_dropout: bool,
-) -> Array:
+) -> chex.ArrayDevice:
   return critic.apply_fn(
       {"params": critic.params},
       observations,
@@ -58,12 +59,12 @@ def _update_critic(
     rng: PRNGKey,
     actor: TrainState,
     critic: TrainState,
-    target_params: TargetParams,
+    target_params: VariableDict,
     batch: FrozenDict,
     discount: float,
     tau: float,
     action_bound: Tuple[Array, Array],
-) -> Tuple[TrainState, TargetParams, MetricDict]:
+) -> Tuple[TrainState, VariableDict, MetricDict]:
   rng_1, rng_2, rng_3 = jax.random.split(rng, 3)
   next_actions = _actor_apply(rng_1, actor, batch["next_observations"], True,
                               action_bound)
@@ -100,11 +101,11 @@ def _update_actor(
     rng: PRNGKey,
     actor: TrainState,
     critic: TrainState,
-    target_params: TargetParams,
+    target_params: VariableDict,
     batch: FrozenDict,
     tau: float,
     action_bound: Tuple[Array, Array],
-) -> Tuple[TrainState, TargetParams, MetricDict]:
+) -> Tuple[TrainState, VariableDict, MetricDict]:
   rng_1, rng_2 = jax.random.split(rng)
 
   def loss_fn(params):
@@ -141,7 +142,7 @@ class DDPG(Agent):
 
     config.mlp_args = ConfigDict()
     config.mlp_args.hidden_dim = 2048
-    config.mlp_args.activations = ("relu",)
+    config.mlp_args.activations = "relu"
     config.mlp_args.dtype = jnp.float32
     config.mlp_args.kernel_init = kernel_default()
     config.mlp_args.bias_init = bias_default()
@@ -183,7 +184,7 @@ class DDPG(Agent):
     self._tgt_params = TargetParams(actor=actor_params, critic=critic_params)
     self._rng = rng
 
-  def sample_actions(self, observations: Array) -> Array:
+  def sample_actions(self, observations: Array) -> chex.ArrayDevice:
     self._rng, noise_rng, dropout_rng = jax.random.split(self._rng, 3)
     actions = _actor_apply(
         dropout_rng,
@@ -196,7 +197,7 @@ class DDPG(Agent):
     return add_normal_noise(noise_rng, actions, self.config.noise_mean,
                             self.config.noise_std)
 
-  def eval_actions(self, observations: Array) -> Array:
+  def eval_actions(self, observations: Array) -> chex.ArrayDevice:
     actions = _actor_apply(
         self._rng,
         self._actor,

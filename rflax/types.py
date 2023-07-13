@@ -1,24 +1,24 @@
 """Generic types used as pytype annotations."""
 
-from typing import Callable, Sequence, Union, Dict, Any
+from typing import Callable, Union, Dict, Any, Mapping
 
+import chex
 import jax
-import jax.numpy as jnp
 import numpy as np
 from flax.core.scope import FrozenVariableDict
 from ml_collections import ConfigDict
 
 Array = jax.Array
-DType = jnp.dtype
-PRNGKey = jax._src.prng.PRNGKeyArray
+DType = chex.ArrayDType
+PRNGKey = chex.PRNGKey
 
-Shape = Sequence[int]
+Shape = chex.Shape
 
 # Variable dict
 VariableDict = Union[FrozenVariableDict, Dict[str, Any]]
 
 # Config dict
-ConfigDictLike = Union[ConfigDict, Dict[str, Any]]
+ConfigDictLike = Union[ConfigDict, Dict[str, Any], Mapping[str, Any]]
 
 # Metrics dict
 MetricDict = Dict[str, Union[Array, float]]
@@ -31,4 +31,3 @@ Initializer = Callable[[PRNGKey, Shape, DType], Array]
 
 # Activation function (__init__ parameter)
 ActivationFn = Callable[[Array], Array]
-ActivationArg = Sequence[Union[str, ActivationFn]]
