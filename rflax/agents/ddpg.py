@@ -1,6 +1,6 @@
 """Implementation of DDPG."""
 
-from rflax.agents import Agent, TargetParams
+from rflax.agents import ContinuousAgent, TargetParams
 from rflax.components.nets.policy import DetTanhPolicy
 from rflax.components.nets.value import StateActionValue
 from rflax.components.noise import add_normal_noise
@@ -128,7 +128,7 @@ def _update_actor(
   return actor, target_params, {"actor_loss": loss}
 
 
-class DDPG(Agent):
+class DDPG(ContinuousAgent):
   @staticmethod
   def get_default_config(
       updates: Optional[ConfigDictLike] = None) -> ConfigDict:
