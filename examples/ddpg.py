@@ -1,6 +1,11 @@
 from rflax.agents.ddpg import DDPG
 from rflax.utils import ReplayBuffer, to_jax_batch, squeeze_to_np, batch_to_jax
-from rflax.logging import define_flags_with_default, print_flags
+from rflax.logging import (
+    define_flags_with_default,
+    print_flags,
+    WandBLogger,
+    get_user_flags,
+)
 
 import gymnasium as gym
 import jax
@@ -20,12 +25,16 @@ FLAGS_DEF = define_flags_with_default(
     ckpt_dir="ckpts/ddpg",
     load_ckpt=-1,
     ddpg=DDPG.get_default_config(),
+    logging=WandBLogger.get_default_config(),
 )
 
 
 def main(_):
   FLAGS = flags.FLAGS
   print_flags(FLAGS, FLAGS_DEF)
+
+  variant = get_user_flags(FLAGS, FLAGS_DEF)
+  logger = WandBLogger(FLAGS.logging, variant)
 
   env = gym.make(FLAGS.env)
 
@@ -84,6 +93,8 @@ def main(_):
                    f"| steps: {episode_steps} "
                    f"| actor_loss: {metrics['actor_loss'].item()} "
                    f"| critic_loss: {metrics['critic_loss'].item()} |")
+      metrics["episode_reward"] = episode_rew
+      logger.log(metrics)
     else:
       logging.info(f"| Epoch {i} | collecting training data... |\r")
 
@@ -112,6 +123,7 @@ def main(_):
       logging.info(f"| Evaluation "
                    f"| avg_reward: {avg_rew:.3f} "
                    f"| avg_steps: {avg_steps} |")
+      logger.log({"eval_reward": avg_rew})
 
     if train and i % FLAGS.save_period == 0:
       agent.save_checkpoint(
