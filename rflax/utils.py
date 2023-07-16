@@ -56,10 +56,16 @@ def _insert_record(storage: DataDict, record: DataDict,
 
 
 class ReplayBuffer(object):
-  def __init__(self, capacity: int, obs_dim: int, action_dim: int) -> None:
+  def __init__(
+      self,
+      capacity: int,
+      obs_dim: int,
+      action_dim: int,
+      action_dtype: type = np.float32,
+  ) -> None:
     self._storage = {
         "observations": np.empty((capacity, obs_dim), dtype=np.float32),
-        "actions": np.empty((capacity, action_dim), dtype=np.float32),
+        "actions": np.empty((capacity, action_dim), dtype=action_dtype),
         "rewards": np.empty((capacity, 1), dtype=np.float32),
         "next_observations": np.empty((capacity, obs_dim), dtype=np.float32),
         "masks": np.empty((capacity, 1), dtype=np.float32),

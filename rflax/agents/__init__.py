@@ -14,17 +14,9 @@ class Agent(object):
       updates: Optional[ConfigDictLike] = None) -> ConfigDict:
     raise NotImplementedError
 
-  def __init__(self, config: ConfigDict, obs_dim: int,
-               action_bound: Sequence[Array]) -> None:
+  def __init__(self, config: ConfigDict, obs_dim: int) -> None:
     self.config = self.get_default_config(config)
-
-    self.action_high = jax.device_put(action_bound[0])
-    self.action_low = (-action_bound[0] if len(action_bound) == 1 else
-                       jax.device_put(action_bound[1]))
-
     self._obs_dim = obs_dim
-    self._action_dim = self.action_high.shape[0]
-
     self._step = 0
 
   @property
@@ -32,12 +24,34 @@ class Agent(object):
     return self._obs_dim
 
   @property
-  def action_dim(self) -> int:
-    return self._action_dim
-
-  @property
   def step(self) -> int:
     return self._step
+
+
+class DiscreteAgent(Agent):
+  def __init__(self, config: ConfigDict, obs_dim: int, n_actions: int) -> None:
+    super().__init__(config, obs_dim)
+
+    self._n_actions = n_actions
+
+  @property
+  def n_actions(self) -> int:
+    return self._n_actions
+
+
+class ContinuousAgent(Agent):
+  def __init__(self, config: ConfigDict, obs_dim: int,
+               action_bound: Sequence[Array]) -> None:
+    super().__init__(config, obs_dim)
+
+    self.action_high = jax.device_put(action_bound[0])
+    self.action_low = (-action_bound[0] if len(action_bound) == 1 else
+                       jax.device_put(action_bound[1]))
+    self._action_dim = self.action_high.shape[0]
+
+  @property
+  def action_dim(self) -> int:
+    return self._action_dim
 
 
 class TargetParams(object):

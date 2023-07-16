@@ -40,6 +40,36 @@ class StateValue(nn.Module):
     return critic
 
 
+class StateDiscreteActionValue(nn.Module):
+  n_actions: int = 2
+  hidden_dim: int = 2048
+  dtype: DType = jnp.float32
+  activations: str = "relu"
+  kernel_init: Initializer = kernel_default()
+  bias_init: Initializer = bias_default()
+  intermediate_dropout: float = 0.1
+  final_dropout: Optional[float] = None
+
+  @nn.compact
+  def __call__(self,
+               observations: Array,
+               enable_dropout: bool = True) -> chex.ArrayDevice:
+    critic = MlpBlock(
+        out_dim=self.n_actions,
+        use_bias=True,
+        intermediate_dim=self.hidden_dim,
+        dtype=self.dtype,
+        activations=self.activations,
+        kernel_init=self.kernel_init,
+        bias_init=self.bias_init,
+        intermediate_dropout=self.intermediate_dropout,
+        final_dropout=self.final_dropout,
+        name="state_action_value_by_action",
+    )(observations, enable_dropout)
+
+    return critic
+
+
 class StateActionValue(nn.Module):
   hidden_dim: int = 2048
   dtype: DType = jnp.float32
