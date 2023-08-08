@@ -139,7 +139,7 @@ class NormalTanhPolicy(nn.Module):
         final_dropout=self.final_dropout,
         name="normal_tanh_policy",
     )(observations, enable_dropout)
-    return TanhMultivariateNormalDiag(loc=mean,
-                                      scale_diag=jnp.exp(logstd),
-                                      low=self.low,
-                                      high=self.high)
+    mean = jnp.tanh(mean)
+    mean = jnp.where(mean > 0, mean * self.high, -mean * self.low)
+    return distrax.MultivariateNormalDiag(loc=mean,
+                                      scale_diag=jnp.exp(logstd))
