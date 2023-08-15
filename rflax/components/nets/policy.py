@@ -141,5 +141,4 @@ class NormalTanhPolicy(nn.Module):
     )(observations, enable_dropout)
     mean = jnp.tanh(mean)
     mean = jnp.where(mean > 0, mean * self.high, -mean * self.low)
-    return distrax.MultivariateNormalDiag(loc=mean,
-                                      scale_diag=jnp.exp(logstd))
+    return distrax.MultivariateNormalDiag(loc=mean, scale_diag=jnp.exp(logstd))

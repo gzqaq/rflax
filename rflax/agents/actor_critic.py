@@ -150,8 +150,10 @@ class ActorCritic(ContinuousAgent):
     rng, actor_rng, critic_rng = jax.random.split(rng, 3)
     fake_obs = jnp.zeros((1, self.obs_dim))
 
-    actor = NormalTanhPolicy(action_dim=self.action_dim, high=self.action_high, low=self.action_low,
-                         **self.config.mlp_args.to_dict())
+    actor = NormalTanhPolicy(action_dim=self.action_dim,
+                             high=self.action_high,
+                             low=self.action_low,
+                             **self.config.mlp_args.to_dict())
     actor_params = init_model(actor, actor_rng, fake_obs)["params"]
     self._actor = TrainState.create(
         apply_fn=actor.apply,

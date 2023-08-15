@@ -137,3 +137,42 @@ class StateMultiActionValue(nn.Module):
     )(inp, enable_dropout)
 
     return critic
+
+
+class StateActionEnsemble(nn.Module):
+  num_qs: int = 2
+  hidden_dim: int = 2048
+  dtype: DType = jnp.float32
+  activations: str = "relu"
+  kernel_init: Initializer = kernel_default()
+  bias_init: Initializer = bias_default()
+  intermediate_dropout: float = 0.1
+  final_dropout: Optional[float] = None
+
+  @nn.compact
+  def __call__(self,
+               observations: Array,
+               actions: Array,
+               enable_dropout: bool = True) -> chex.ArrayDevice:
+    vmap_critic = nn.vmap(
+        StateActionValue,
+        variable_axes={"params": 0},
+        split_rngs={
+            "params": True,
+            "dropout": True
+        },
+        in_axes=None,
+        out_axes=0,
+        axis_size=self.num_qs,
+    )
+    qs = vmap_critic(
+        hidden_dim=self.hidden_dim,
+        dtype=self.dtype,
+        activations=self.activations,
+        kernel_init=self.kernel_init,
+        bias_init=self.bias_init,
+        intermediate_dropout=self.intermediate_dropout,
+        final_dropout=self.final_dropout,
+    )(observations, actions, enable_dropout)
+
+    return qs
