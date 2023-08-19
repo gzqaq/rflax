@@ -1,0 +1,43 @@
+env: CartPole-v1
+seed: 42
+
+total_timesteps: 1000000
+steps_before_train: 1000
+
+eval_interval: 1000
+eval_n_trajs: 3
+
+rb_size: 1000000
+batch_size: 32
+
+save_interval: 10000
+ckpt_dir: "ckpts/dqn"
+load_ckpt: -1
+
+agent:
+  _target_: rflax.agents.dqn.DQNConfig
+  discount: 0.98
+  lr: 0.001
+  eps: 0.1
+  target_update_interval: 10
+  mlp_args:
+    _target_: rflax.components.blocks.MlpConfig
+    dtype:
+      _target_: hydra.utils.get_class
+      path: jax.numpy.float32
+    activations: relu-relu
+    intermediate_dim: 256
+    kernel_init:
+      _target_: rflax.components.initializers.kernel_default
+    bias_init:
+      _target_: rflax.components.initializers.bias_default
+    intermediate_dropout: 0
+    final_dropout: ${.intermediate_dropout}
+
+logging:
+  _target_: rflax.logging.LoggerConfig
+  online: false
+  project: rflax
+  id: dqn
+  output_dir: null
+  notes: null

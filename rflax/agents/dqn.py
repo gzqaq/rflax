@@ -3,7 +3,8 @@
 from flax.core.frozen_dict import FrozenDict
 from ml_collections import ConfigDict
 from optax import adam
-from rflax.agents import DiscreteAgent, TargetParams
+from rflax.agents import DiscreteAgent
+from rflax.components.blocks import MlpConfig
 from rflax.components.nets.value import StateDiscreteActionValue
 from rflax.components.loss import q_learning_loss
 from rflax.utils import init_model
@@ -58,29 +59,24 @@ def _update_critic(
   return critic, {"q_loss": loss}
 
 
+@chex.dataclass(frozen=True)
+class DQNConfig:
+  discount: float = 0.98
+  lr: float = 0.001
+  eps: float = 0.1
+  target_update_interval: int = 10
+  mlp_args: MlpConfig = MlpConfig()
+
+
+@chex.dataclass(frozen=True)
+class TargetParams:
+  critic: VariableDict
+
+
 class DQN(DiscreteAgent):
   @staticmethod
-  def get_default_config(
-      updates: Optional[ConfigDictLike] = None) -> ConfigDict:
-    config = ConfigDict()
-    config.discount = 0.98
-    config.lr = 0.001
-    config.target_update_period = 10
-    config.eps = 0.1
-
-    config.mlp_args = ConfigDict()
-    config.mlp_args.hidden_dim = 256
-    config.mlp_args.activations = "relu-relu"
-    config.mlp_args.dtype = jnp.float32
-    config.mlp_args.kernel_init = kernel_default()
-    config.mlp_args.bias_init = bias_default()
-    config.mlp_args.intermediate_dropout = 0.1
-    config.mlp_args.final_dropout = None
-
-    if updates:
-      config.update(ConfigDict(updates).copy_and_resolve_references())
-
-    return config
+  def default_config() -> DQNConfig:
+    return DQNConfig()
 
   def __init__(self, config: ConfigDict, rng: PRNGKey, obs_dim: int,
                n_actions: int) -> None:
@@ -89,7 +85,7 @@ class DQN(DiscreteAgent):
     rng, q_init_rng = jax.random.split(rng)
     fake_obs = jnp.zeros((1, self.obs_dim))
     critic = StateDiscreteActionValue(n_actions=self.n_actions,
-                                      **self.config.mlp_args.to_dict())
+                                      config=self.config.mlp_args)
     critic_params = init_model(critic, q_init_rng, fake_obs)["params"]
     self._critic = TrainState.create(apply_fn=critic.apply,
                                      params=critic_params,
@@ -121,8 +117,8 @@ class DQN(DiscreteAgent):
                                            self._tgt_params.critic, batch,
                                            self.config.discount)
 
-    if self.step % self.config.target_update_period == 0 and self.step != 0:
-      self._tgt_params = TargetParams(critic=self._critic.params)
+    if self.step % self.config.target_update_interval == 0 and self.step != 0:
+      self._tgt_params = self._tgt_params.replace(critic=self._critic.params)
 
     self._step += 1
 
@@ -144,7 +140,7 @@ class DQN(DiscreteAgent):
     }
     params_dict = {
         "critic": self._critic,
-        "target_params": self._tgt_params.to_dict(),
+        "target_params": dict(self._tgt_params.items()),
     }
 
     save_checkpoint(

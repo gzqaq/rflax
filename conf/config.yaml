@@ -1,0 +1,3 @@
+defaults:
+  - dqn: default
+  - td3: default
