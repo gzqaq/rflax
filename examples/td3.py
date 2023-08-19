@@ -1,68 +1,47 @@
 from rflax.agents.ddpg import TD3
 from rflax.utils import ReplayBuffer, to_jax_batch, squeeze_to_np, batch_to_jax
-from rflax.logging import (
-    define_flags_with_default,
-    print_flags,
-    WandBLogger,
-    get_user_flags,
-)
+from rflax.logging import WandBLogger
 
 import gymnasium as gym
+import hydra
 import jax
 import numpy as np
-from absl import app, flags
+from hydra.utils import instantiate
+from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
-FLAGS_DEF = define_flags_with_default(
-    env="Pendulum-v1",
-    seed=42,
-    rb_capacity=int(1e5),
-    rb_minimal_size=1000,
-    total_timesteps=1000000,
-    batch_size=32,
-    eval_period=1000,
-    eval_n_trajs=3,
-    save_period=10000,
-    ckpt_dir="ckpts/td3",
-    load_ckpt=-1,
-    td3=TD3.get_default_config(),
-    logging=WandBLogger.get_default_config(),
-)
 
+@hydra.main(version_base=None, config_path="../conf", config_name="config")
+def main(cfg: DictConfig):
+  print(OmegaConf.to_yaml(cfg.td3))
+  logger = WandBLogger(instantiate(cfg.td3.logging), OmegaConf.to_container(cfg.td3))
 
-def main(_):
-  FLAGS = flags.FLAGS
-  print_flags(FLAGS, FLAGS_DEF)
+  env = gym.make(cfg.td3.env)
 
-  variant = get_user_flags(FLAGS, FLAGS_DEF)
-  logger = WandBLogger(FLAGS.logging, variant)
-
-  env = gym.make(FLAGS.env)
-
-  rng = jax.random.PRNGKey(FLAGS.seed)
-  np.random.seed(FLAGS.seed)
-  obs, _ = env.reset(seed=FLAGS.seed)
+  rng = jax.random.PRNGKey(cfg.td3.seed)
+  np.random.seed(cfg.td3.seed)
+  obs, _ = env.reset(seed=cfg.td3.seed)
 
   rng, agent_rng = jax.random.split(rng)
 
   agent = TD3(
-      FLAGS.td3,
+      instantiate(cfg.td3.agent),
       agent_rng,
       env.observation_space.shape[0],
       (env.action_space.high, env.action_space.low),
   )
-  rb = ReplayBuffer(FLAGS.rb_capacity, agent.obs_dim, agent.action_dim)
+  rb = ReplayBuffer(cfg.td3.rb_size, agent.obs_dim, agent.action_dim)
 
-  if FLAGS.load_ckpt != -1:
-    agent.restore_checkpoint(FLAGS.ckpt_dir, step=FLAGS.load_ckpt)
+  if cfg.td3.load_ckpt != -1:
+    agent.restore_checkpoint(cfg.td3.ckpt_dir, step=cfg.td3.load_ckpt)
 
   # Training
   train = False
   done = False
   obs, _ = env.reset()
-  with tqdm(desc="Training", total=FLAGS.total_timesteps,
+  with tqdm(desc="Training", total=cfg.td3.total_timesteps,
             unit_scale=True) as pbar:
-    for i in range(FLAGS.total_timesteps):
+    for i in range(cfg.td3.total_timesteps):
       a = squeeze_to_np(agent.sample_actions(to_jax_batch(obs)))
       next_obs, reward, done, mask, _ = env.step(a)
 
@@ -82,22 +61,22 @@ def main(_):
       if done:
         obs, _ = env.reset()
         if train:
-          metrics = agent.update(batch_to_jax(rb.sample(FLAGS.batch_size)))
+          metrics = agent.update(batch_to_jax(rb.sample(cfg.td3.batch_size)))
           logger.log(metrics, step=i)
       else:
         obs = next_obs
 
-      if not train and rb.size >= FLAGS.rb_minimal_size:
+      if not train and i >= cfg.td3.steps_before_train:
         train = True
         pbar.set_description("Training")
       if not train:
         pbar.set_description("Collecting")
 
-      if train and i % FLAGS.eval_period == 0:
+      if train and i % cfg.td3.eval_interval == 0:
         avg_rew = 0
         avg_steps = 0
 
-        for j in range(FLAGS.eval_n_trajs):
+        for j in range(cfg.td3.eval_n_trajs):
           rew = 0
           steps = 0
 
@@ -118,10 +97,10 @@ def main(_):
         logger.log({"eval_reward": avg_rew}, step=i)
         pbar.set_postfix({"eval_reward": avg_rew, "eval_steps": avg_steps})
 
-      if train and i % FLAGS.save_period == 0:
+      if train and i % cfg.td3.save_interval == 0:
         agent.save_checkpoint(
-            FLAGS.ckpt_dir,
-            keep=int(FLAGS.total_timesteps / FLAGS.save_period + 1),
+            cfg.td3.ckpt_dir,
+            keep=int(cfg.td3.total_timesteps / cfg.td3.save_interval + 1),
             overwrite=True,
         )
 
@@ -129,4 +108,4 @@ def main(_):
 
 
 if __name__ == "__main__":
-  app.run(main)
+  main()

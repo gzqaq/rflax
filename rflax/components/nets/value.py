@@ -1,6 +1,6 @@
 """Value networks."""
 
-from rflax.components.blocks import MlpBlock
+from rflax.components.blocks import MlpBlock, MlpConfig
 from rflax.components.initializers import kernel_default, bias_default
 from rflax.types import Array, DType, Initializer
 from rflax.utils import expand_and_repeat
@@ -12,13 +12,7 @@ from typing import Optional
 
 
 class StateValue(nn.Module):
-  hidden_dim: int = 2048
-  dtype: DType = jnp.float32
-  activations: str = "relu"
-  kernel_init: Initializer = kernel_default()
-  bias_init: Initializer = bias_default()
-  intermediate_dropout: float = 0.1
-  final_dropout: Optional[float] = None
+  config: MlpConfig
 
   @nn.compact
   def __call__(self,
@@ -27,13 +21,7 @@ class StateValue(nn.Module):
     critic = MlpBlock(
         out_dim=1,
         use_bias=True,
-        intermediate_dim=self.hidden_dim,
-        dtype=self.dtype,
-        activations=self.activations,
-        kernel_init=self.kernel_init,
-        bias_init=self.bias_init,
-        intermediate_dropout=self.intermediate_dropout,
-        final_dropout=self.final_dropout,
+        config=self.config,
         name="state_value",
     )(observations, enable_dropout)
 
@@ -41,14 +29,8 @@ class StateValue(nn.Module):
 
 
 class StateDiscreteActionValue(nn.Module):
-  n_actions: int = 2
-  hidden_dim: int = 2048
-  dtype: DType = jnp.float32
-  activations: str = "relu"
-  kernel_init: Initializer = kernel_default()
-  bias_init: Initializer = bias_default()
-  intermediate_dropout: float = 0.1
-  final_dropout: Optional[float] = None
+  n_actions: int
+  config: MlpConfig
 
   @nn.compact
   def __call__(self,
@@ -57,13 +39,7 @@ class StateDiscreteActionValue(nn.Module):
     critic = MlpBlock(
         out_dim=self.n_actions,
         use_bias=True,
-        intermediate_dim=self.hidden_dim,
-        dtype=self.dtype,
-        activations=self.activations,
-        kernel_init=self.kernel_init,
-        bias_init=self.bias_init,
-        intermediate_dropout=self.intermediate_dropout,
-        final_dropout=self.final_dropout,
+        config=self.config,
         name="state_action_value_by_action",
     )(observations, enable_dropout)
 
@@ -71,13 +47,7 @@ class StateDiscreteActionValue(nn.Module):
 
 
 class StateActionValue(nn.Module):
-  hidden_dim: int = 2048
-  dtype: DType = jnp.float32
-  activations: str = "relu"
-  kernel_init: Initializer = kernel_default()
-  bias_init: Initializer = bias_default()
-  intermediate_dropout: float = 0.1
-  final_dropout: Optional[float] = None
+  config: MlpConfig
 
   @nn.compact
   def __call__(self,
@@ -91,13 +61,7 @@ class StateActionValue(nn.Module):
     critic = MlpBlock(
         out_dim=1,
         use_bias=True,
-        intermediate_dim=self.hidden_dim,
-        dtype=self.dtype,
-        activations=self.activations,
-        kernel_init=self.kernel_init,
-        bias_init=self.bias_init,
-        intermediate_dropout=self.intermediate_dropout,
-        final_dropout=self.final_dropout,
+        config=self.config,
         name="state_action_value",
     )(inp, enable_dropout)
 
@@ -105,13 +69,7 @@ class StateActionValue(nn.Module):
 
 
 class StateMultiActionValue(nn.Module):
-  hidden_dim: int = 2048
-  dtype: DType = jnp.float32
-  activations: str = "relu"
-  kernel_init: Initializer = kernel_default()
-  bias_init: Initializer = bias_default()
-  intermediate_dropout: float = 0.1
-  final_dropout: Optional[float] = None
+  config: MlpConfig
 
   @nn.compact
   def __call__(self,
@@ -126,13 +84,7 @@ class StateMultiActionValue(nn.Module):
     critic = MlpBlock(
         out_dim=1,
         use_bias=True,
-        intermediate_dim=self.hidden_dim,
-        dtype=self.dtype,
-        activations=self.activations,
-        kernel_init=self.kernel_init,
-        bias_init=self.bias_init,
-        intermediate_dropout=self.intermediate_dropout,
-        final_dropout=self.final_dropout,
+        config=self.config,
         name="state_action_value",
     )(inp, enable_dropout)
 
@@ -140,14 +92,8 @@ class StateMultiActionValue(nn.Module):
 
 
 class StateActionEnsemble(nn.Module):
-  num_qs: int = 2
-  hidden_dim: int = 2048
-  dtype: DType = jnp.float32
-  activations: str = "relu"
-  kernel_init: Initializer = kernel_default()
-  bias_init: Initializer = bias_default()
-  intermediate_dropout: float = 0.1
-  final_dropout: Optional[float] = None
+  num_qs: int
+  config: MlpConfig
 
   @nn.compact
   def __call__(self,
@@ -165,14 +111,6 @@ class StateActionEnsemble(nn.Module):
         out_axes=0,
         axis_size=self.num_qs,
     )
-    qs = vmap_critic(
-        hidden_dim=self.hidden_dim,
-        dtype=self.dtype,
-        activations=self.activations,
-        kernel_init=self.kernel_init,
-        bias_init=self.bias_init,
-        intermediate_dropout=self.intermediate_dropout,
-        final_dropout=self.final_dropout,
-    )(observations, actions, enable_dropout)
+    qs = vmap_critic(config=self.config)(observations, actions, enable_dropout)
 
     return qs

@@ -1,13 +1,13 @@
 """Implementation of DDPG."""
 
-from rflax.agents import ContinuousAgent, TargetParams
+from rflax.agents import ContinuousAgent
+from rflax.components.blocks import MlpConfig
 from rflax.components.nets.policy import DetTanhPolicy
 from rflax.components.nets.value import StateActionValue, StateActionEnsemble
 from rflax.components.noise import add_normal_noise
 from rflax.components.loss import q_learning_loss
 from rflax.utils import init_model, soft_target_update
-from rflax.components.initializers import kernel_default, bias_default
-from rflax.types import Array, PRNGKey, ConfigDictLike, MetricDict, VariableDict
+from rflax.types import Array, PRNGKey, MetricDict, VariableDict
 
 import chex
 import jax
@@ -136,31 +136,24 @@ def _update_ddpg_actor(
   return actor, target_params, {"actor_loss": loss}
 
 
+@chex.dataclass(frozen=True)
+class DDPGConfig:
+  discount: float = 0.98
+  tau: float = 0.005
+  actor_lr: float = 0.001
+  critic_lr: float = 0.001
+  act_noise: float = 0.1
+  mlp_args: MlpConfig = MlpConfig()
+
+@chex.dataclass(frozen=True)
+class TargetParams:
+  actor: VariableDict
+  critic: VariableDict
+
 class DDPG(ContinuousAgent):
   @staticmethod
-  def get_default_config(
-      updates: Optional[ConfigDictLike] = None) -> ConfigDict:
-    config = ConfigDict()
-    config.discount = 0.98
-    config.actor_lr = 5e-4
-    config.critic_lr = 5e-3
-    config.tau = 0.005
-    config.noise_mean = 0.0
-    config.noise_std = 0.01
-
-    config.mlp_args = ConfigDict()
-    config.mlp_args.hidden_dim = 2048
-    config.mlp_args.activations = "relu"
-    config.mlp_args.dtype = jnp.float32
-    config.mlp_args.kernel_init = kernel_default()
-    config.mlp_args.bias_init = bias_default()
-    config.mlp_args.intermediate_dropout = 0.01
-    config.mlp_args.final_dropout = None
-
-    if updates:
-      config.update(ConfigDict(updates).copy_and_resolve_references())
-
-    return config
+  def default_config() -> DDPGConfig:
+    return DDPGConfig()
 
   def __init__(
       self,
@@ -176,13 +169,13 @@ class DDPG(ContinuousAgent):
     fake_actions = jnp.zeros((1, self.action_dim))
 
     actor = DetTanhPolicy(action_dim=self.action_dim,
-                          **self.config.mlp_args.to_dict())
+                          config=self.config.mlp_args)
     actor_params = init_model(actor, actor_rng, fake_obs)["params"]
     self._actor = TrainState.create(apply_fn=actor.apply,
                                     params=actor_params,
                                     tx=adam(self.config.actor_lr))
 
-    critic = StateActionValue(**self.config.mlp_args.to_dict())
+    critic = StateActionValue(self.config.mlp_args)
     critic_params = init_model(critic, critic_rng, fake_obs,
                                fake_actions)["params"]
     self._critic = TrainState.create(apply_fn=critic.apply,
@@ -202,8 +195,8 @@ class DDPG(ContinuousAgent):
         (self.action_high, self.action_low),
     )
 
-    return add_normal_noise(noise_rng, actions, self.config.noise_mean,
-                            self.config.noise_std)
+    return add_normal_noise(noise_rng, actions, 0,
+                            self.config.act_noise)
 
   def eval_actions(self, observations: Array) -> chex.ArrayDevice:
     actions = _actor_apply(
@@ -241,7 +234,7 @@ class DDPG(ContinuousAgent):
     chex.block_until_chexify_assertions_complete()
 
     metrics.update(actor_info)
-    self._tgt_params = TargetParams(actor=actor_target_params,
+    self._tgt_params = self._tgt_params.replace(actor=actor_target_params,
                                     critic=critic_target_params)
     self._step += 1
 
@@ -266,7 +259,7 @@ class DDPG(ContinuousAgent):
     params_dict = {
         "actor": self._actor,
         "critic": self._critic,
-        "target_params": self._tgt_params.to_dict(),
+        "target_params": dict(self._tgt_params.items()),
     }
     save_checkpoint(
         ckpt_dir,
@@ -381,34 +374,23 @@ def _update_td3_actor(rng, actor, critic, target_param, batch, tau,
   return actor, target_params, {"actor_loss": loss}
 
 
+@chex.dataclass(frozen=True)
+class TD3Config:
+  num_qs: int = 2
+  discount: float = 0.98
+  tau: float = 0.005
+  actor_lr: float = 0.001
+  critic_lr: float = 0.001
+  act_noise: float = 0.1
+  target_noise: float = 0.2
+  clip_noise: float = 0.5
+  policy_delay: int = 2
+  mlp_args: MlpConfig = MlpConfig()
+
 class TD3(ContinuousAgent):
   @staticmethod
-  def get_default_config(
-      updates: Optional[ConfigDictLike] = None) -> ConfigDict:
-    config = ConfigDict()
-    config.num_qs = 2
-    config.discount = 0.98
-    config.actor_lr = 5e-4
-    config.critic_lr = 5e-3
-    config.tau = 0.005
-    config.act_noise = 0.1
-    config.target_noise = 0.2
-    config.clip_noise = 0.5
-    config.policy_delay = 2
-
-    config.mlp_args = ConfigDict()
-    config.mlp_args.hidden_dim = 2048
-    config.mlp_args.activations = "relu"
-    config.mlp_args.dtype = jnp.float32
-    config.mlp_args.kernel_init = kernel_default()
-    config.mlp_args.bias_init = bias_default()
-    config.mlp_args.intermediate_dropout = 0
-    config.mlp_args.final_dropout = None
-
-    if updates:
-      config.update(ConfigDict(updates).copy_and_resolve_references())
-
-    return config
+  def default_config() -> TD3Config:
+    return TD3Config()
 
   def __init__(
       self,
@@ -424,14 +406,14 @@ class TD3(ContinuousAgent):
     fake_actions = jnp.zeros((1, self.action_dim))
 
     actor = DetTanhPolicy(action_dim=self.action_dim,
-                          **self.config.mlp_args.to_dict())
+                          config=self.config.mlp_args)
     actor_params = init_model(actor, actor_rng, fake_obs)["params"]
     self._actor = TrainState.create(apply_fn=actor.apply,
                                     params=actor_params,
                                     tx=adam(self.config.actor_lr))
 
     critic = StateActionEnsemble(num_qs=self.config.num_qs,
-                                 **self.config.mlp_args.to_dict())
+                                 config=self.config.mlp_args)
     critic_params = init_model(critic, critic_rng, fake_obs,
                                fake_actions)["params"]
     self._critic = TrainState.create(apply_fn=critic.apply,
@@ -491,11 +473,10 @@ class TD3(ContinuousAgent):
           (self.action_high, self.action_low),
       )
       metrics.update(actor_info)
-      self._tgt_params = TargetParams(actor=actor_tgt_param,
+      self._tgt_params = self._tgt_params.replace(actor=actor_tgt_param,
                                       critic=critic_tgt_param)
     else:
-      self._tgt_params = TargetParams(actor=self._tgt_params.actor,
-                                      critic=critic_tgt_param)
+      self._tgt_params = self._tgt_params.replace(critic=critic_tgt_param)
 
     chex.block_until_chexify_assertions_complete()
     self._step += 1
@@ -520,7 +501,7 @@ class TD3(ContinuousAgent):
     params_dict = {
         "actor": self._actor,
         "critic": self._critic,
-        "target_params": self._tgt_params.to_dict(),
+        "target_params": dict(self._tgt_params.items()),
     }
     save_checkpoint(
         ckpt_dir,

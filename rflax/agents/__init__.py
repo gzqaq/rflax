@@ -2,20 +2,24 @@
 
 from rflax.types import Array, ConfigDictLike, VariableDict
 
+import chex
 import jax
 from copy import deepcopy
 from ml_collections import ConfigDict
 from typing import Optional, Sequence
 
+@chex.dataclass(frozen=True)
+class AgentConfig:
+  pass
+
 
 class Agent(object):
   @staticmethod
-  def get_default_config(
-      updates: Optional[ConfigDictLike] = None) -> ConfigDict:
+  def default_config():
     raise NotImplementedError
 
-  def __init__(self, config: ConfigDict, obs_dim: int) -> None:
-    self.config = self.get_default_config(config)
+  def __init__(self, config, obs_dim: int) -> None:
+    self.config = config
     self._obs_dim = obs_dim
     self._step = 0
 
@@ -29,7 +33,7 @@ class Agent(object):
 
 
 class DiscreteAgent(Agent):
-  def __init__(self, config: ConfigDict, obs_dim: int, n_actions: int) -> None:
+  def __init__(self, config, obs_dim: int, n_actions: int) -> None:
     super().__init__(config, obs_dim)
 
     self._n_actions = n_actions
@@ -40,7 +44,7 @@ class DiscreteAgent(Agent):
 
 
 class ContinuousAgent(Agent):
-  def __init__(self, config: ConfigDict, obs_dim: int,
+  def __init__(self, config, obs_dim: int,
                action_bound: Sequence[Array]) -> None:
     super().__init__(config, obs_dim)
 

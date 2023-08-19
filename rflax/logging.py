@@ -1,3 +1,4 @@
+import chex
 import os
 import pprint
 import tempfile
@@ -9,6 +10,7 @@ from ml_collections import ConfigDict
 from ml_collections.config_flags import config_flags
 from ml_collections.config_dict import config_dict
 from socket import gethostname
+from typing import Optional, Dict
 
 
 def define_flags_with_default(**kwargs):
@@ -68,51 +70,40 @@ def flatten_config_dict(config, prefix=None):
 def prefix_metrics(metrics, prefix):
   return {"{}/{}".format(prefix, key): value for key, value in metrics.items()}
 
+@chex.dataclass(frozen=True)
+class LoggerConfig:
+  online: bool = False
+  project: str = "rflax"
+  id: str = uuid.uuid4().hex[:8]
+  output_dir: Optional[str] = None
+  notes: Optional[str] = None
 
 class WandBLogger(object):
   @staticmethod
-  def get_default_config(updates=None):
-    config = ConfigDict()
-    config.online = False
-    config.prefix = "rflax"
-    config.project = "jax"
-    config.output_dir = "/tmp/rflax"
-    config.name = config_dict.placeholder(str)
-    config.anonymous = config_dict.placeholder(str)
-    config.notes = config_dict.placeholder(str)
+  def default_config() -> LoggerConfig:
+    return LoggerConfig()
 
-    if updates is not None:
-      config.update(ConfigDict(updates).copy_and_resolve_references())
-    return config
+  def __init__(self, config: LoggerConfig, run_config: Dict):
+    self.config = config
 
-  def __init__(self, config, variant):
-    self.config = self.get_default_config(config)
-
-    if self.config.name is None:
-      self.config.name = uuid.uuid4().hex[:8]
-
-    if self.config.prefix != "":
-      self.config.project = f"{self.config.prefix}-{self.config.project}"
-
-    if self.config.output_dir == "":
-      self.config.output_dir = tempfile.mkdtemp()
+    if self.config.output_dir is None:
+      self.config = self.config.replace(output_dir=tempfile.mkdtemp())
     else:
-      self.config.output_dir = os.path.join(self.config.output_dir,
-                                            self.config.name)
+      self.config = self.config.replace(output_dir=os.path.join(self.config.output_dir,
+                                            self.config.id))
       os.makedirs(self.config.output_dir, exist_ok=True)
 
-    self._variant = copy(variant)
+    self._run_config = run_config
 
-    if "hostname" not in self._variant:
-      self._variant["hostname"] = gethostname()
+    if "hostname" not in self._run_config:
+      self._run_config["hostname"] = gethostname()
 
     self.run = wandb.init(
         reinit=True,
-        config=self._variant,
+        config=self._run_config,
         project=self.config.project,
         dir=self.config.output_dir,
-        name=self.config.name,
-        anonymous=self.config.anonymous,
+        id=self.config.id,
         notes=self.config.notes,
         settings=wandb.Settings(
             start_method="thread",
@@ -126,11 +117,11 @@ class WandBLogger(object):
 
   @property
   def run_name(self):
-    return self.config.name
+    return self.config.id
 
   @property
   def variant(self):
-    return self._variant
+    return self._run_config
 
   @property
   def output_dir(self):
