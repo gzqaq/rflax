@@ -8,6 +8,11 @@ import dejax
 import flax.linen as nn
 from flax import struct
 from functools import partial
+from typing import Callable, Any
+
+
+def get_apply_fn(nn_cls, *args, **kwargs) -> Callable[[VariableDict, Any], Any]:
+  return jit(nn_cls(*args, **kwargs).apply)
 
 
 @partial(jit, static_argnames=("axis", "repeats"))
