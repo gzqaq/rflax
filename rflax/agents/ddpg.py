@@ -157,7 +157,7 @@ class DDPG(ContinuousAgent):
 
   def __init__(
       self,
-      config: ConfigDict,
+      config: DDPGConfig,
       rng: PRNGKey,
       obs_dim: int,
       action_bound: Sequence[Array],
@@ -394,7 +394,7 @@ class TD3(ContinuousAgent):
 
   def __init__(
       self,
-      config: ConfigDict,
+      config: TD3Config,
       rng: PRNGKey,
       obs_dim: int,
       action_bound: Sequence[Array],

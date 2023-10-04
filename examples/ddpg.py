@@ -1,74 +1,49 @@
 from rflax.agents.ddpg import DDPG
 from rflax.utils import ReplayBuffer, to_jax_batch, squeeze_to_np, batch_to_jax
-from rflax.logging import (
-    define_flags_with_default,
-    print_flags,
-    WandBLogger,
-    get_user_flags,
-)
+from rflax.logging import WandBLogger
 
 import gymnasium as gym
+import hydra
 import jax
 import numpy as np
-from absl import app, flags, logging
-
-FLAGS_DEF = define_flags_with_default(
-    env="Pendulum-v1",
-    seed=42,
-    rb_capacity=int(1e5),
-    rb_minimal_size=1000,
-    n_epochs=10000,
-    batch_size=512,
-    eval_period=5,
-    eval_n_trajs=3,
-    save_period=100,
-    ckpt_dir="ckpts/ddpg",
-    load_ckpt=-1,
-    ddpg=DDPG.get_default_config(),
-    logging=WandBLogger.get_default_config(),
-)
+from hydra.utils import instantiate
+from omegaconf import DictConfig, OmegaConf
+from tqdm import tqdm
 
 
-def main(_):
-  FLAGS = flags.FLAGS
-  print_flags(FLAGS, FLAGS_DEF)
+@hydra.main(version_base=None, config_path="../conf", config_name="config")
+def main(cfg: DictConfig):
+  print(OmegaConf.to_yaml(cfg.ddpg))
+  logger = WandBLogger(instantiate(cfg.ddpg.logging), OmegaConf.to_container(cfg.ddpg))
 
-  variant = get_user_flags(FLAGS, FLAGS_DEF)
-  logger = WandBLogger(FLAGS.logging, variant)
+  env = gym.make(cfg.ddpg.env)
 
-  env = gym.make(FLAGS.env)
+  rng = jax.random.PRNGKey(cfg.ddpg.seed)
+  np.random.seed(cfg.ddpg.seed)
+  obs, _ = env.reset(seed=cfg.ddpg.seed)
 
-  rng = jax.random.PRNGKey(FLAGS.seed)
-  np.random.seed(FLAGS.seed)
-  obs, _ = env.reset(seed=FLAGS.seed)
-
-  rng, *rngs = jax.random.split(rng, 9)
+  rng, agent_rng = jax.random.split(rng)
 
   agent = DDPG(
-      FLAGS.ddpg,
-      rngs.pop(),
+      instantiate(cfg.ddpg.agent),
+      agent_rng,
       env.observation_space.shape[0],
       (env.action_space.high, env.action_space.low),
   )
-  rb = ReplayBuffer(FLAGS.rb_capacity, agent.obs_dim, agent.action_dim)
+  rb = ReplayBuffer(cfg.ddpg.rb_size, agent.obs_dim, agent.action_dim)
 
-  if FLAGS.load_ckpt != -1:
-    agent.restore_checkpoint(FLAGS.ckpt_dir, step=FLAGS.load_ckpt)
+  if cfg.ddpg.load_ckpt != -1:
+    agent.restore_checkpoint(cfg.ddpg.ckpt_dir, step=cfg.ddpg.load_ckpt)
 
   # Training
   train = False
-  for i in range(FLAGS.n_epochs):
-    done = False
-    obs, _ = env.reset()
-
-    episode_rew = 0
-    episode_steps = 0
-    while not done:
+  done = False
+  obs, _ = env.reset()
+  with tqdm(desc="Training", total=cfg.ddpg.total_timesteps,
+            unit_scale=True) as pbar:
+    for i in range(cfg.ddpg.total_timesteps):
       a = squeeze_to_np(agent.sample_actions(to_jax_batch(obs)))
       next_obs, reward, done, mask, _ = env.step(a)
-
-      episode_rew += reward
-      episode_steps += 1
 
       reward = np.array(reward)
       done = np.array(done or mask)
@@ -83,55 +58,54 @@ def main(_):
           "masks": mask,
       })
 
-      obs = next_obs
-
-    if rb.size >= FLAGS.rb_minimal_size:
-      train = True
-      metrics = agent.update(batch_to_jax(rb.sample(FLAGS.batch_size)))
-      logging.info(f"| Epoch {i} "
-                   f"| reward: {episode_rew:.3f} "
-                   f"| steps: {episode_steps} "
-                   f"| actor_loss: {metrics['actor_loss'].item()} "
-                   f"| critic_loss: {metrics['critic_loss'].item()} |")
-      metrics["episode_reward"] = episode_rew
-      logger.log(metrics)
-    else:
-      logging.info(f"| Epoch {i} | collecting training data... |\r")
-
-    if train and i % FLAGS.eval_period == 0:
-      avg_rew = 0
-      avg_steps = 0
-
-      for j in range(FLAGS.eval_n_trajs):
-        rew = 0
-        steps = 0
-
-        done = False
+      if done:
         obs, _ = env.reset()
-        while not done:
-          a = squeeze_to_np(agent.eval_actions(to_jax_batch(obs)))
-          s_, r, d, d_, _ = env.step(a)
+        if train:
+          metrics = agent.update(batch_to_jax(rb.sample(cfg.ddpg.batch_size)))
+          logger.log(metrics, step=i)
+      else:
+        obs = next_obs
 
-          rew += r
-          steps += 1
-          done = d or d_
-          obs = s_
+      if not train and i >= cfg.ddpg.steps_before_train:
+        train = True
+        pbar.set_description("Training")
+      if not train:
+        pbar.set_description("Collecting")
 
-        avg_rew += (rew - avg_rew) / (j + 1)
-        avg_steps += (steps - avg_steps) / (j + 1)
+      if train and i % cfg.ddpg.eval_interval == 0:
+        avg_rew = 0
+        avg_steps = 0
 
-      logging.info(f"| Evaluation "
-                   f"| avg_reward: {avg_rew:.3f} "
-                   f"| avg_steps: {avg_steps} |")
-      logger.log({"eval_reward": avg_rew})
+        for j in range(cfg.ddpg.eval_n_trajs):
+          rew = 0
+          steps = 0
 
-    if train and i % FLAGS.save_period == 0:
-      agent.save_checkpoint(
-          FLAGS.ckpt_dir,
-          keep=int(FLAGS.n_epochs / FLAGS.save_period + 1),
-          overwrite=True,
-      )
+          eval_done = False
+          eval_obs, _ = env.reset()
+          while not eval_done:
+            eval_a = squeeze_to_np(agent.eval_actions(to_jax_batch(eval_obs)))
+            s_, r, d, d_, _ = env.step(eval_a)
+
+            rew += r
+            steps += 1
+            eval_done = d or d_
+            eval_obs = s_
+
+          avg_rew += (rew - avg_rew) / (j + 1)
+          avg_steps += (steps - avg_steps) / (j + 1)
+
+        logger.log({"eval_reward": avg_rew}, step=i)
+        pbar.set_postfix({"eval_reward": avg_rew, "eval_steps": avg_steps})
+
+      if train and i % cfg.ddpg.save_interval == 0:
+        agent.save_checkpoint(
+            cfg.ddpg.ckpt_dir,
+            keep=int(cfg.ddpg.total_timesteps / cfg.ddpg.save_interval + 1),
+            overwrite=True,
+        )
+
+      pbar.update(1)
 
 
 if __name__ == "__main__":
-  app.run(main)
+  main()
