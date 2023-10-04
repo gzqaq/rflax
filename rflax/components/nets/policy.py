@@ -1,14 +1,10 @@
 """Policy networks."""
 
-from rflax.components.blocks import MlpBlock, MultiOutputMlp, MlpConfig
-from rflax.components.initializers import kernel_default, bias_default
-from rflax.types import Array, DType, Initializer
+from ..blocks import MlpBlock, MlpConfig
+from ...types import Array
 
-import chex
-import distrax
-import jax.numpy as jnp
 import flax.linen as nn
-from typing import Optional
+from typing import Tuple
 
 
 class DetTanhPolicy(nn.Module):
@@ -16,16 +12,8 @@ class DetTanhPolicy(nn.Module):
   config: MlpConfig
 
   @nn.compact
-  def __call__(self,
-               observations: Array,
-               enable_dropout: bool = True) -> chex.ArrayDevice:
-    action = MlpBlock(
-        out_dim=self.action_dim,
-        use_bias=True,
-        config=self.config,
-        name="det_tanh_policy",
-    )(observations, enable_dropout)
-    return nn.tanh(action)
+  def __call__(self, observation: Array) -> Array:
+    return nn.tanh(MlpBlock(self.action_dim, self.config, name="det_pi")(observation))
 
 
 class NormalPolicy(nn.Module):
@@ -33,34 +21,9 @@ class NormalPolicy(nn.Module):
   config: MlpConfig
 
   @nn.compact
-  def __call__(self,
-               observations: Array,
-               enable_dropout: bool = True) -> distrax.Distribution:
-    mean, logstd = MultiOutputMlp(
-        out_dim=(self.action_dim,) * 2,
-        use_bias=True,
-        config=self.config,
-        name="normal_policy",
-    )(observations, enable_dropout)
-    return distrax.MultivariateNormalDiag(loc=mean, scale_diag=jnp.exp(logstd))
+  def __call__(self, observation: Array) -> Tuple[Array, Array]:
+    outp = MlpBlock(self.action_dim * 2, self.config, name="normal_pi")(observation)
+    outp = outp.reshape(*outp.shape[:-1], self.action_dim, 2)
+    mean, logstd = outp[..., 0], outp[..., 1]
 
-
-class NormalTanhPolicy(nn.Module):
-  action_dim: int
-  high: Array
-  low: Array
-  config: MlpConfig
-
-  @nn.compact
-  def __call__(self,
-               observations: Array,
-               enable_dropout: bool = True) -> distrax.Distribution:
-    mean, logstd = MultiOutputMlp(
-        out_dim=(self.action_dim,) * 2,
-        use_bias=True,
-        config=self.config,
-        name="normal_tanh_policy",
-    )(observations, enable_dropout)
-    mean = jnp.tanh(mean)
-    mean = jnp.where(mean > 0, mean * self.high, -mean * self.low)
-    return distrax.MultivariateNormalDiag(loc=mean, scale_diag=jnp.exp(logstd))
+    return mean, logstd
