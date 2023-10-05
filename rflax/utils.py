@@ -4,9 +4,8 @@ from .types import Array, PRNGKey, VariableDict
 
 from jutils import jax, np, jit
 
+import chex
 import dejax
-import flax.linen as nn
-from flax import struct
 from functools import partial
 from typing import Callable, Any
 
@@ -26,7 +25,7 @@ def soft_update(src: VariableDict, target: VariableDict, tau: float) -> Variable
   return jax.tree_map(lambda s, t: s * tau + t * (1 - tau), src, target)
 
 
-@struct.dataclass
+@chex.dataclass(frozen=True)
 class TransitionTuple:
   obs: Array
   action: Array

@@ -14,9 +14,9 @@ save_interval: 10000
 ckpt_dir: "ckpts/td3"
 load_ckpt: -1
 
-agent:
-  _target_: rflax.agents.ddpg.TD3Config
-  num_qs: 2
+train:
+  _target_: rflax.agents.td3.TD3Config
+  n_qs: 2
   discount: 0.98
   tau: 0.005
   actor_lr: 0.001
@@ -25,19 +25,19 @@ agent:
   target_noise: 0.2
   clip_noise: 0.5
   policy_delay: 2
-  mlp_args:
-    _target_: rflax.components.blocks.MlpConfig
-    dtype:
-      _target_: hydra.utils.get_class
-      path: jax.numpy.float32
-    activations: relu-relu
-    intermediate_dim: 256
-    kernel_init:
-      _target_: rflax.components.initializers.kernel_default
-    bias_init:
-      _target_: rflax.components.initializers.bias_default
-    intermediate_dropout: 0
-    final_dropout: ${.intermediate_dropout}
+
+mlp:
+  _target_: rflax.components.blocks.MlpConfig
+  hidden_dims: "256-256"
+  act_fn: "tanh"
+  dtype:
+    _target_: hydra.utils.get_class
+    path: jax.numpy.float_
+  use_bias: true
+  kernel_init:
+    _target_: rflax.components.initializers.kernel_default
+  bias_init:
+    _target_: rflax.components.initializers.bias_default
 
 logging:
   _target_: rflax.logging.LoggerConfig

@@ -14,4 +14,4 @@ def q_learning_loss(q_vals: Array, target_q_vals: Array, rewards: Array,
   masks = jnp.reshape(masks, q_vals.shape)
   td_target = rewards + discount * masks * target_q_vals
 
-  return jnp.mean(jnp.power(q_vals - td_target, 2))
+  return jnp.sum(jnp.power(q_vals - td_target, 2))
