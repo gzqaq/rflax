@@ -10,6 +10,7 @@ from typing import Optional, Dict
 def prefix_metrics(metrics, prefix):
   return {"{}/{}".format(prefix, key): value for key, value in metrics.items()}
 
+
 @struct.dataclass
 class LoggerConfig:
   online: bool = False
@@ -17,6 +18,7 @@ class LoggerConfig:
   id: str = uuid.uuid4().hex[:8]
   output_dir: Optional[PathLike] = None
   notes: Optional[str] = None
+
 
 class WandBLogger(object):
   @staticmethod

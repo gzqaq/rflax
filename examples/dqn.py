@@ -14,7 +14,8 @@ from tqdm import tqdm
 @hydra.main(version_base=None, config_path="../conf", config_name="config")
 def main(cfg: DictConfig):
   print(OmegaConf.to_yaml(cfg.dqn))
-  logger = WandBLogger(instantiate(cfg.dqn.logging), OmegaConf.to_container(cfg.dqn))
+  logger = WandBLogger(instantiate(cfg.dqn.logging),
+                       OmegaConf.to_container(cfg.dqn))
 
   env = gym.make(cfg.dqn.env)
 
@@ -83,7 +84,8 @@ def main(cfg: DictConfig):
           eval_done = False
           eval_obs, _ = env.reset()
           while not eval_done:
-            eval_a = squeeze_to_np(agent.eval_actions(to_jax_batch(eval_obs))).item()
+            eval_a = squeeze_to_np(agent.eval_actions(
+                to_jax_batch(eval_obs))).item()
             s_, r, d, d_, _ = env.step(eval_a)
 
             rew += r

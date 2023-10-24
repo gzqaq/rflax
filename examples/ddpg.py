@@ -14,7 +14,8 @@ from tqdm import tqdm
 @hydra.main(version_base=None, config_path="../conf", config_name="config")
 def main(cfg: DictConfig):
   print(OmegaConf.to_yaml(cfg.ddpg))
-  logger = WandBLogger(instantiate(cfg.ddpg.logging), OmegaConf.to_container(cfg.ddpg))
+  logger = WandBLogger(instantiate(cfg.ddpg.logging),
+                       OmegaConf.to_container(cfg.ddpg))
 
   env = gym.make(cfg.ddpg.env)
 

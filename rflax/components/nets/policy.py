@@ -16,7 +16,8 @@ class DetTanhPolicy(nn.Module):
 
   @nn.compact
   def __call__(self, observation: Array) -> Array:
-    return nn.tanh(MlpBlock(self.action_dim, self.config, name="det_pi")(observation))
+    return nn.tanh(
+        MlpBlock(self.action_dim, self.config, name="det_pi")(observation))
 
 
 class NormalPolicy(nn.Module):
@@ -25,7 +26,8 @@ class NormalPolicy(nn.Module):
 
   @nn.compact
   def __call__(self, observation: Array) -> Tuple[Array, Array]:
-    outp = MlpBlock(self.action_dim * 2, self.config, name="normal_pi")(observation)
+    outp = MlpBlock(self.action_dim * 2, self.config,
+                    name="normal_pi")(observation)
     outp = outp.reshape(*outp.shape[:-1], self.action_dim, 2)
     mean, logstd = outp[..., 0], outp[..., 1]
 
@@ -35,8 +37,8 @@ class NormalPolicy(nn.Module):
 def tanh_gaussian_dist(mean: Array, log_std: Array) -> distrax.Distribution:
   return distrax.Transformed(
       distrax.MultivariateNormalDiag(mean, np.exp(log_std)),
-      distrax.Block(distrax.Tanh(), ndims=1)
-    )
+      distrax.Block(distrax.Tanh(), ndims=1),
+  )
 
 
 class TanhGaussianPolicy(nn.Module):

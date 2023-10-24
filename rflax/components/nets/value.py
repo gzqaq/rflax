@@ -40,4 +40,11 @@ class ActionValueEnsemble(nn.Module):
 
   @nn.compact
   def __call__(self, state: Array, action: Array) -> Array:
-    return nn.vmap(ContinuousActionValue, variable_axes={"params": 0}, split_rngs={"params": True}, in_axes=None, out_axes=0, axis_size=self.n_qs)(self.config)(state, action)
+    return nn.vmap(
+        ContinuousActionValue,
+        variable_axes={"params": 0},
+        split_rngs={"params": True},
+        in_axes=None,
+        out_axes=0,
+        axis_size=self.n_qs,
+    )(self.config)(state, action)

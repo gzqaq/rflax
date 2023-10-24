@@ -145,10 +145,12 @@ class DDPGConfig:
   act_noise: float = 0.1
   mlp_args: MlpConfig = MlpConfig()
 
+
 @chex.dataclass(frozen=True)
 class TargetParams:
   actor: VariableDict
   critic: VariableDict
+
 
 class DDPG(ContinuousAgent):
   @staticmethod
@@ -195,8 +197,7 @@ class DDPG(ContinuousAgent):
         (self.action_high, self.action_low),
     )
 
-    return add_normal_noise(noise_rng, actions, 0,
-                            self.config.act_noise)
+    return add_normal_noise(noise_rng, actions, 0, self.config.act_noise)
 
   def eval_actions(self, observations: Array) -> chex.ArrayDevice:
     actions = _actor_apply(
@@ -235,7 +236,7 @@ class DDPG(ContinuousAgent):
 
     metrics.update(actor_info)
     self._tgt_params = self._tgt_params.replace(actor=actor_target_params,
-                                    critic=critic_target_params)
+                                                critic=critic_target_params)
     self._step += 1
 
     return metrics
@@ -387,6 +388,7 @@ class TD3Config:
   policy_delay: int = 2
   mlp_args: MlpConfig = MlpConfig()
 
+
 class TD3(ContinuousAgent):
   @staticmethod
   def default_config() -> TD3Config:
@@ -474,7 +476,7 @@ class TD3(ContinuousAgent):
       )
       metrics.update(actor_info)
       self._tgt_params = self._tgt_params.replace(actor=actor_tgt_param,
-                                      critic=critic_tgt_param)
+                                                  critic=critic_tgt_param)
     else:
       self._tgt_params = self._tgt_params.replace(critic=critic_tgt_param)
 

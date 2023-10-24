@@ -128,8 +128,7 @@ def make_train(
           action_high,
       )
 
-      tgt_qs = critic(state.target_critic, batch.next_obs,
-                      a_).min(axis=0)
+      tgt_qs = critic(state.target_critic, batch.next_obs, a_).min(axis=0)
       tgt_qs = tile_over_axis(tgt_qs, config.n_qs, 0)
 
       def loss_fn(params):
@@ -137,15 +136,12 @@ def make_train(
         return q_learning_loss(qs, tgt_qs, r, config.discount, masks)
 
       loss, grads = jax.value_and_grad(loss_fn)(state.critic)
-      updates, opt_state = critic_opt.update(grads, opt_state,
-                                             state.critic)
+      updates, opt_state = critic_opt.update(grads, opt_state, state.critic)
       new_params = optax.apply_updates(state.critic, updates)
-      new_tgt_params = soft_update(new_params, state.target_critic,
-                                   config.tau)
+      new_tgt_params = soft_update(new_params, state.target_critic, config.tau)
 
       return (
-          state.replace(critic=new_params,
-                        target_critic=new_tgt_params),
+          state.replace(critic=new_params, target_critic=new_tgt_params),
           opt_state,
           loss,
       )
@@ -159,21 +155,18 @@ def make_train(
         return loss
 
       loss, grads = jax.value_and_grad(loss_fn)(state.actor)
-      updates, opt_state = actor_opt.update(grads, opt_state,
-                                            state.actor)
+      updates, opt_state = actor_opt.update(grads, opt_state, state.actor)
       new_params = optax.apply_updates(state.actor, updates)
-      new_tgt_params = soft_update(new_params, state.target_actor,
-                                   config.tau)
+      new_tgt_params = soft_update(new_params, state.target_actor, config.tau)
 
       return (
-          state.replace(actor=new_params,
-                        target_actor=new_tgt_params),
+          state.replace(actor=new_params, target_actor=new_tgt_params),
           opt_state,
           loss,
       )
 
-    params, critic_state, critic_loss = update_critic(
-        rng, params, train_state.critic)
+    params, critic_state, critic_loss = update_critic(rng, params,
+                                                      train_state.critic)
 
     def delay(params, train_state):
       train_state = train_state.replace(critic=critic_state,
@@ -185,8 +178,7 @@ def make_train(
       return params, train_state, metrics
 
     def no_delay(params, train_state):
-      params, actor_state, actor_loss = update_actor(params,
-                                                        train_state.actor)
+      params, actor_state, actor_loss = update_actor(params, train_state.actor)
       train_state = train_state.replace(actor=actor_state,
                                         critic=critic_state,
                                         step=train_state.step + 1)

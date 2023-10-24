@@ -30,13 +30,15 @@ class MlpConfig:
 
 
 def build_dense(n_feats: int, config: MlpConfig, name: str) -> nn.Module:
-  return nn.Dense(features=n_feats,
-                  use_bias=config.use_bias,
-                  dtype=config.dtype,
-                  param_dtype=config.dtype,
-                  kernel_init=config.kernel_init,
-                  bias_init=config.bias_init,
-                  name=name)
+  return nn.Dense(
+      features=n_feats,
+      use_bias=config.use_bias,
+      dtype=config.dtype,
+      param_dtype=config.dtype,
+      kernel_init=config.kernel_init,
+      bias_init=config.bias_init,
+      name=name,
+  )
 
 
 class MlpBlock(nn.Module):

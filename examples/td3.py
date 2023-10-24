@@ -25,13 +25,24 @@ def main(cfg: DictConfig):
   rng = random.PRNGKey(cfg.td3.seed)
   obs, _ = env.reset(seed=cfg.td3.seed)
 
-  eval_pi, sample_pi = td3.get_policy(conf, mlp_conf, env.action_space.low, env.action_space.high)
+  eval_pi, sample_pi = td3.get_policy(conf, mlp_conf, env.action_space.low,
+                                      env.action_space.high)
   critic = td3.get_critic(conf, mlp_conf)
-  rng, params = rng_wrapper(td3.init_params)(rng, conf, mlp_conf, obs, env.action_space.high)
+  rng, params = rng_wrapper(td3.init_params)(rng, conf, mlp_conf, obs,
+                                             env.action_space.high)
   train_state = td3.init_train(params, optax.adam(1e-3))
-  update_fn = td3.make_train(conf, eval_pi, critic, optax.adam(conf.actor_lr), optax.adam(conf.critic_lr), env.action_space.low, env.action_space.high)
+  update_fn = td3.make_train(
+      conf,
+      eval_pi,
+      critic,
+      optax.adam(conf.actor_lr),
+      optax.adam(conf.critic_lr),
+      env.action_space.low,
+      env.action_space.high,
+  )
 
-  rb = ReplayBuffer(TransitionTuple.dummy(obs, env.action_space.low), cfg.td3.rb_size)
+  rb = ReplayBuffer(TransitionTuple.dummy(obs, env.action_space.low),
+                    cfg.td3.rb_size)
 
   # Training
   train = False
@@ -48,7 +59,8 @@ def main(cfg: DictConfig):
       rb.add(TransitionTuple.new(obs, a, reward, next_obs, done))
 
       if train:
-        rng, (params, train_state, metrics) = rng_wrapper(update_fn)(rng, params, train_state, rb.sample(rng, cfg.td3.batch_size))
+        rng, (params, train_state, metrics) = rng_wrapper(update_fn)(
+            rng, params, train_state, rb.sample(rng, cfg.td3.batch_size))
         if metrics["actor_loss"] == 0:
           del metrics["actor_loss"]
         logger.log(metrics, step=i)

@@ -12,7 +12,6 @@
 # class AgentConfig:
 #   pass
 
-
 # class Agent(object):
 #   @staticmethod
 #   def default_config():
@@ -31,7 +30,6 @@
 #   def step(self) -> int:
 #     return self._step
 
-
 # class DiscreteAgent(Agent):
 #   def __init__(self, config, obs_dim: int, n_actions: int) -> None:
 #     super().__init__(config, obs_dim)
@@ -41,7 +39,6 @@
 #   @property
 #   def n_actions(self) -> int:
 #     return self._n_actions
-
 
 # class ContinuousAgent(Agent):
 #   def __init__(self, config, obs_dim: int,
@@ -56,7 +53,6 @@
 #   @property
 #   def action_dim(self) -> int:
 #     return self._action_dim
-
 
 # class TargetParams(object):
 #   """Store params of target networks."""
