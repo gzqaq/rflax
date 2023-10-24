@@ -1,0 +1,16 @@
+env: Pendulum-v1
+seed: 42
+npz_path: ~/Research/rflax/Pendulum-v1_td3_rb.npz
+
+n_epochs: 1000
+batch_size: 32
+
+eval_interval: 3
+eval_n_trajs: 3
+
+train:
+  _target_: rflax.agents.cql.CQLConfig
+  n_actions: 10
+  target_action_gap: 1.0
+  temp: 1.0
+  min_q_weight: 5.0

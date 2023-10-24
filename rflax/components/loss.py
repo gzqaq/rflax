@@ -2,16 +2,16 @@
 
 from rflax.types import Array
 
+from jutils import jax, np, sum_of_square
+
 import chex
-import jax
-import jax.numpy as jnp
 
 
 @jax.jit
 def q_learning_loss(q_vals: Array, target_q_vals: Array, rewards: Array,
                     discount: float, masks: Array) -> chex.ArrayDevice:
-  rewards = jnp.reshape(rewards, q_vals.shape)
-  masks = jnp.reshape(masks, q_vals.shape)
+  rewards = np.reshape(rewards, q_vals.shape)
+  masks = np.reshape(masks, q_vals.shape)
   td_target = rewards + discount * masks * target_q_vals
 
-  return jnp.sum(jnp.power(q_vals - td_target, 2))
+  return sum_of_square(q_vals - td_target)

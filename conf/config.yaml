@@ -3,3 +3,4 @@ defaults:
   - ddpg: default
   - td3: default
   - sac: default
+  - cql: default
