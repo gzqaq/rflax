@@ -2,3 +2,4 @@ defaults:
   - dqn: default
   - ddpg: default
   - td3: default
+  - sac: default

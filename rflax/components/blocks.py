@@ -9,6 +9,16 @@ import flax.linen as nn
 from flax import struct
 
 
+class ScalarBlock(nn.Module):
+  init_value: float
+
+  def setup(self):
+    self.value = self.param("value", lambda x: self.init_value)
+
+  def __call__(self):
+    return self.value
+
+
 @struct.dataclass
 class MlpConfig:
   hidden_dims: str = "256-256"

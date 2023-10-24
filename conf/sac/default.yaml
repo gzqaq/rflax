@@ -1,0 +1,49 @@
+env: Pendulum-v1
+seed: 42
+
+total_timesteps: 1000000
+steps_before_train: 1000
+
+eval_interval: 1000
+eval_n_trajs: 3
+
+rb_size: 1000000
+batch_size: 32
+
+save_interval: 10000
+ckpt_dir: "ckpts/sac"
+load_ckpt: -1
+
+train:
+  _target_: rflax.agents.sac.SACConfig
+  n_qs: 2
+  discount: 0.98
+  tau: 0.005
+  actor_lr: 0.001
+  critic_lr: 0.001
+  log_std_multiplier: 1.0
+  log_std_offset: -1.0
+  alpha_multiplier: 1.0
+  target_entropy: 0.0
+  backup_entropy: false
+
+mlp:
+  _target_: rflax.components.blocks.MlpConfig
+  hidden_dims: "256-256"
+  act_fn: "relu"
+  dtype:
+    _target_: hydra.utils.get_class
+    path: jax.numpy.float_
+  use_bias: true
+  kernel_init:
+    _target_: rflax.components.initializers.kernel_default
+  bias_init:
+    _target_: rflax.components.initializers.bias_default
+
+logging:
+  _target_: rflax.logging.LoggerConfig
+  online: false
+  project: rflax
+  id: sac
+  output_dir: null
+  notes: null

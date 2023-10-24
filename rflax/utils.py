@@ -6,18 +6,11 @@ from jutils import jax, np, jit
 
 import chex
 import dejax
-from functools import partial
 from typing import Callable, Any
 
 
 def get_apply_fn(nn_cls, *args, **kwargs) -> Callable[[VariableDict, Any], Any]:
   return jit(nn_cls(*args, **kwargs).apply)
-
-
-@partial(jit, static_argnames=("axis", "repeats"))
-def expand_and_repeat(a: Array, axis: int, repeats: int) -> Array:
-  a = np.expand_dims(a, axis=axis)
-  return np.repeat(a, repeats=repeats, axis=axis)
 
 
 @jit
@@ -32,6 +25,14 @@ class TransitionTuple:
   reward: Array
   next_obs: Array
   done: Array
+
+  @classmethod
+  def new(cls, obs: Array, action: Array, reward: Array, next_obs: Array, done: Array):
+    return cls(obs=obs, action=action, reward=reward, next_obs=next_obs, done=done)
+
+  @classmethod
+  def dummy(cls, obs: Array, action: Array):
+    return cls.new(obs, action, np.ones((1,)), obs, np.ones((1,), dtype=np.bool_))
 
 
 class ReplayBuffer(object):
