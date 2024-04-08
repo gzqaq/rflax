@@ -1,0 +1,7 @@
+[tool.mypy]
+python_executable = "$CONDA_PREFIX/bin/python"
+warn_unused_configs = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+# disallow_any_unimported = true
